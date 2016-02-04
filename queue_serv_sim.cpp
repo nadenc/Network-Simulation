@@ -8,14 +8,14 @@ double genRand(int factor){ 			// U(0,1) generator
 	return -log( 1 - ( (long double) rand() / (long double) RAND_MAX ) ) / factor;
 }
 
-int main(){
+int queue_sim(double rho, double time, int QUEUE_MAX){
 	
-	const double rho = 0.95;						// utilization of queue
-	const double length = 12000;						// length of packet in bits
+	//const double rho = 0.95;						// utilization of queue
+	const double length = 12000;					// length of packet in bits
 	const double C = 1000000;						// link rate in bps
 	double lambda = rho*C/length;					// packets arriving per second
 	const double alpha = 10*lambda;					// observation events per second
-	const double time = 10;							// simulation time in seconds
+	//const double time = 10;							// simulation time in seconds
 	const int PACKETS = lambda*time*1.2;			// approx number of packets + 20% headroom
 	const int OBS = ((lambda+alpha)*time*1.2);		// approx number of observation events + 20% headroom
 	
@@ -24,11 +24,15 @@ int main(){
 	double O[OBS];						// observation events
 	double ES[OBS+PACKETS*2][3];		// event scheduler
 	
+	double ET = 0; 						// average sojourn time
+	double p_idle = 0;					// proportion of server idle time
+	double p_loss = 0;					// proportion of dropped packets
+	
 	int i = 0;							// for counters
 	
 	int nA = 0, nO = 0, nD = 0;			// initialize number of arrivals, departures and observers
 	
-	const int QUEUE_MAX = 9999;			// queue max size
+	//const int QUEUE_MAX = 9999;			// queue max size
 	int queue = 0;						// packets in queue
 	int queue_drop = 0;					// offset to account for dropped packets
 	
@@ -49,7 +53,7 @@ int main(){
 		
 		if (serv_busy){									// check if server is still busy
 			
-			while ( D[i-queue_drop-1] == -1 ){	// if the packet was dropped skip it
+			while ( D[i-queue_drop-1] == -1 ){			// if the packet was dropped skip it
 				queue_drop++;
 			}
 														// update queue
@@ -78,6 +82,10 @@ int main(){
 		if (!serv_busy){ 								// queue empty and server ready, serve packet immediately
 			D[i] = ( A[i] + ( length / C ) );			// set packet departure time
 			serv_busy = 1;								// set server busy
+		}
+		
+		if (D[i] != -1){								// add up sojourn time of delivered packets
+			ET += (D[i]-A[i]);
 		}
 		
 		//cout << "Packet: " << i << "\tArr: " << A[i] << "\tDep: " << D[i] << "\tQueue: " << queue << endl;
@@ -130,6 +138,7 @@ int main(){
 				ES[i][0] = O[pO];
 				ES[i][1] = 0;
 				ES[i][2] = pO;
+				if (pD==pA) p_idle++;		// if all packets have been passes through system is idle
 				pO++;
 				i++;
 			}
@@ -154,6 +163,7 @@ int main(){
 				ES[i][0] = O[pO];
 				ES[i][1] = 0;
 				ES[i][2] = pO;
+				if (pD==pA) p_idle++;		// if all packets have been passes through system is idle
 				pO++;
 				i++;
 			}
@@ -172,11 +182,40 @@ int main(){
 		
 	}
 	
-	cout << "Simulation Time: " << ES[num_events-1][0] << endl;
-	cout << "Observations: " << nO << endl;
-	cout << "Packets Arrived: " << nA << endl;
-	cout << "Packets Delivered: " << nD << endl;
+	p_idle = 100 * (p_idle / nO);									// calculate percentage of time idle
 	
+	ET = (ET / nD);													// calculate average sojourn time of delivered packets
+	
+	p_loss = 100 * ( ((double) nA - (double) nD) / (double) nA);	// calculate percentage of lost packets
+	
+	cout << "############################################################" << endl;
+	cout << "Rho: " << rho;
+	cout << "\tQueue Size: " << QUEUE_MAX;
+	cout << "\tSimulation Time: " << ES[num_events-1][0] << endl;
+	
+	cout << "Observations: " << nO << endl;
+	cout << "Packet Arrivals: " << nA << endl;
+	cout << "Packets Delivered : " << nD << endl;
+	cout << "Packets Dropped: " << nA-nD << endl;
+	
+	cout << "Average sojourn time: " << ET << endl;
+	cout << "Idle %: " << p_idle << endl;
+	cout << "Loss %: " << p_loss << endl << endl;
+
+}
+
+int main(){
+	double j = 0.25;			// rho
+	int size_of_queue = 2;		// queue length
+	double sim_time = 10;		// simulation time
+	
+	while (j <= 0.95){			// simulation loop
+		queue_sim(j,sim_time,size_of_queue);
+		j += 0.1;
+	}
+	
+}	
+
 /*
 	//double mean = 0;					// initialize mean
 	//double variance = 0;				// initialize variance
@@ -189,4 +228,3 @@ int main(){
 */
 	//cout << "Mean: " << mean << endl;
 	//cout << "Variance: " << variance << endl;
-}
